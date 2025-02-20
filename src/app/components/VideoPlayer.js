@@ -1,53 +1,84 @@
+// app/components/VideoPlayer.js
 'use client';
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 
 const VideoPlayer = ({ videoId }) => {
   const videoRef = useRef(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     if (videoRef.current) {
       const video = videoRef.current;
-      
-      // Add error handling
-      video.addEventListener('error', (e) => {
-        console.error('Error during video playback:', e);
-      });
 
-      // Add loading indicator
-      video.addEventListener('waiting', () => {
-        // Show loading spinner
-        console.log('Video is buffering...');
-      });
+      const handleCanPlay = () => {
+        setIsLoading(false);
+        setError(null);
+      };
 
-      video.addEventListener('playing', () => {
-        // Hide loading spinner
-        console.log('Video is playing');
-      });
+      const handleError = (e) => {
+        console.error('Video error:', e);
+        setError('Error loading video');
+        setIsLoading(false);
+      };
 
-      // Add quality control if supported
-      if (video.getVideoPlaybackQuality) {
-        setInterval(() => {
-          const quality = video.getVideoPlaybackQuality();
-          if (quality.droppedVideoFrames > 0) {
-            console.warn('Dropped frames detected:', quality.droppedVideoFrames);
-          }
-        }, 5000);
-      }
+      const handleWaiting = () => {
+        setIsLoading(true);
+      };
+
+      const handlePlaying = () => {
+        setIsLoading(false);
+      };
+
+      // Safari ต้องการการจัดการ metadata
+      const handleLoadedMetadata = () => {
+        // บางครั้ง Safari ต้องการ play() หลังจาก metadata โหลดเสร็จ
+        if (video.paused) {
+          video.play().catch(e => console.log('Auto-play prevented'));
+        }
+      };
+
+      video.addEventListener('canplay', handleCanPlay);
+      video.addEventListener('error', handleError);
+      video.addEventListener('waiting', handleWaiting);
+      video.addEventListener('playing', handlePlaying);
+      video.addEventListener('loadedmetadata', handleLoadedMetadata);
+
+      return () => {
+        video.removeEventListener('canplay', handleCanPlay);
+        video.removeEventListener('error', handleError);
+        video.removeEventListener('waiting', handleWaiting);
+        video.removeEventListener('playing', handlePlaying);
+        video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      };
     }
   }, []);
 
   return (
-    <div className="relative w-full aspect-video">
+    <div className="relative w-full aspect-video bg-gray-900">
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        </div>
+      )}
+      {error && (
+        <div className="absolute inset-0 flex items-center justify-center text-red-500">
+          {error}
+        </div>
+      )}
       <video
         ref={videoRef}
         className="w-full h-full"
         controls
-        controlsList="nodownload"
         playsInline
         preload="metadata"
+        controlsList="nodownload"
       >
-        <source src={`/api/stream/${videoId}`} type="video/mp4" />
+        <source 
+          src={`/api/stream/${encodeURIComponent(videoId)}`} 
+          type="video/mp4"
+        />
         Your browser does not support the video tag.
       </video>
     </div>
