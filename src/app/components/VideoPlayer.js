@@ -1,4 +1,3 @@
-// app/components/VideoPlayer.js
 'use client';
 
 import React, { useRef, useEffect, useState } from 'react';
@@ -31,11 +30,18 @@ const VideoPlayer = ({ videoId }) => {
         setIsLoading(false);
       };
 
-      // Safari ต้องการการจัดการ metadata
       const handleLoadedMetadata = () => {
-        // บางครั้ง Safari ต้องการ play() หลังจาก metadata โหลดเสร็จ
-        if (video.paused) {
-          video.play().catch(e => console.log('Auto-play prevented'));
+        video.play().catch(() => {
+          // Safari อาจต้องการ user interaction ก่อน play
+          console.log('Auto-play prevented');
+        });
+      };
+
+      // Safari specific: ลองโหลดวิดีโอใหม่ถ้าเกิด error
+      const handleStalled = () => {
+        if (video.error) {
+          console.log('Video stalled, attempting reload');
+          video.load();
         }
       };
 
@@ -44,6 +50,10 @@ const VideoPlayer = ({ videoId }) => {
       video.addEventListener('waiting', handleWaiting);
       video.addEventListener('playing', handlePlaying);
       video.addEventListener('loadedmetadata', handleLoadedMetadata);
+      video.addEventListener('stalled', handleStalled);
+
+      // Safari specific: ตั้งค่า preload
+      video.preload = 'auto';
 
       return () => {
         video.removeEventListener('canplay', handleCanPlay);
@@ -51,6 +61,7 @@ const VideoPlayer = ({ videoId }) => {
         video.removeEventListener('waiting', handleWaiting);
         video.removeEventListener('playing', handlePlaying);
         video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+        video.removeEventListener('stalled', handleStalled);
       };
     }
   }, []);
@@ -72,7 +83,7 @@ const VideoPlayer = ({ videoId }) => {
         className="w-full h-full"
         controls
         playsInline
-        preload="metadata"
+        preload="auto"
         controlsList="nodownload"
       >
         <source 
