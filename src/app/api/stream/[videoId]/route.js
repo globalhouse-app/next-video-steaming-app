@@ -2,9 +2,14 @@ import { streamManagerInstance } from '../../../lib/streamManager';
 import { createReadStream, statSync, existsSync } from 'fs';
 import { join } from 'path';
 
-export async function GET(request, context) {
+export async function GET(request, {params }) {
   try {
-    const videoId = await context.params.videoId;
+
+    if (!params?.videoId) {
+      return new Response('Video ID is required', { status: 400 });
+    }
+    
+    const videoId =  params.videoId;
     const videoPath = join(process.cwd(), 'public', 'videos', `${videoId}.mp4`);
     
     if (!existsSync(videoPath)) {
@@ -16,30 +21,43 @@ export async function GET(request, context) {
     const fileSize = stat.size;
     const range = request.headers.get('range');
 
+    // Common headers for all responses
+    const commonHeaders = {
+      'Accept-Ranges': 'bytes',
+      'Content-Type': 'video/mp4',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+      'Access-Control-Allow-Headers': 'Range',
+      'Cross-Origin-Resource-Policy': 'cross-origin',
+    };
+
     // สำหรับ Safari ที่ไม่ส่ง range header
     if (!range) {
-      // แทนที่จะส่งไฟล์ทั้งหมด เราจะส่งเฉพาะส่วนแรก
-      const CHUNK_SIZE = 1024 * 1024; // 1MB
+      const start = 0;
+      const CHUNK_SIZE = 2 * 1024 * 1024; // 2MB
       const end = Math.min(CHUNK_SIZE - 1, fileSize - 1);
       
       const headers = {
-        'Accept-Ranges': 'bytes',
-        'Content-Range': `bytes 0-${end}/${fileSize}`,
-        'Content-Length': end + 1,
-        'Content-Type': 'video/mp4',
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0',
+        ...commonHeaders,
+        'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+        'Content-Length': end - start + 1,
       };
 
-      const stream = createReadStream(videoPath, { start: 0, end });
+      const stream = createReadStream(videoPath, { start, end });
       return new Response(stream, { status: 206, headers });
     }
 
     // สำหรับ range requests
     const parts = range.replace(/bytes=/, '').split('-');
     const start = parseInt(parts[0], 10);
-    let end = parts[1] ? parseInt(parts[1], 10) : start + 1024 * 1024; // 1MB chunks
+    const CHUNK_SIZE = 2 * 1024 * 1024; // 2MB chunks
+    let end = parts[1] 
+      ? parseInt(parts[1], 10) 
+      : Math.min(start + CHUNK_SIZE, fileSize - 1);
     
     // ป้องกันไม่ให้ end เกินขนาดไฟล์
     end = Math.min(end, fileSize - 1);
@@ -49,7 +67,8 @@ export async function GET(request, context) {
       return new Response('Requested range not satisfiable', {
         status: 416,
         headers: {
-          'Content-Range': `bytes */${fileSize}`
+          'Content-Range': `bytes */${fileSize}`,
+          ...commonHeaders
         }
       });
     }
@@ -58,13 +77,9 @@ export async function GET(request, context) {
     const stream = createReadStream(videoPath, { start, end });
     
     const headers = {
-      'Accept-Ranges': 'bytes',
+      ...commonHeaders,
       'Content-Range': `bytes ${start}-${end}/${fileSize}`,
       'Content-Length': contentLength,
-      'Content-Type': 'video/mp4',
-      'Cache-Control': 'no-cache, no-store, must-revalidate',
-      'Pragma': 'no-cache',
-      'Expires': '0',
     };
 
     return new Response(stream, { status: 206, headers });
